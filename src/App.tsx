@@ -20,7 +20,7 @@ function App() {
     loading, 
     error, 
     uploadFile, 
-    generateSampleData,
+    fetchProperties,
     sortProperties 
   } = useProperties();
   
@@ -189,7 +189,7 @@ function App() {
                 
                 {properties.length === 0 && (
                   <button
-                    onClick={generateSampleData}
+                    onClick={fetchProperties}
                     className="w-full mt-4 px-4 py-2 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 text-sm rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors"
                   >
                     Generate Sample Data

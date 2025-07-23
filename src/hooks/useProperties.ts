@@ -1,133 +1,148 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Property, SortOption } from '../types';
+import { supabase } from '../supabaseClient';
+import { PostgrestError } from '@supabase/supabase-js';
+
 
 export const useProperties = () => {
-  const [properties, setProperties] = useState<Property[]>([]);
+  const [properties, setProperties]               = useState<Property[]>([]);
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading]                     = useState(false);
+  const [error, setError]                         = useState<string | null>(null);
 
-  const generateSampleData = useCallback(() => {
-    const propertyTypes = ['Single-Family', 'Condo', 'Multi-Family', 'Townhouse', 'Vacant Land'];
-    const cities = ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix', 'Philadelphia', 'San Antonio', 'San Diego'];
-    const states = ['NY', 'CA', 'IL', 'TX', 'AZ', 'PA', 'TX', 'CA'];
-    
-    const sampleProperties: Property[] = Array.from({ length: 50 }, (_, i) => {
-      const price = Math.floor(Math.random() * 800000) + 200000;
-      const monthlyRent = Math.floor(price * 0.008 + Math.random() * 500);
-      const bedrooms = Math.floor(Math.random() * 5) + 1;
-      const bathrooms = Math.floor(Math.random() * 3) + 1;
-      const squareFootage = Math.floor(Math.random() * 2000) + 800;
-      const yearBuilt = Math.floor(Math.random() * 50) + 1970;
-      const cityIndex = Math.floor(Math.random() * cities.length);
-      
-      // Calculate investment metrics
-      const annualRent = monthlyRent * 12;
-      const roi = ((annualRent - (price * 0.02)) / price) * 100; // Simplified ROI calculation
-      const cashflow = monthlyRent - (price * 0.004); // Simplified cash flow
-      const caprate = (annualRent / price) * 100;
-      const grossYield = (annualRent / price) * 100;
-      
-      const propertyType = propertyTypes[Math.floor(Math.random() * propertyTypes.length)];
-      
-      return {
-        id: `property-${i + 1}`,
-        address: `${Math.floor(Math.random() * 9999) + 1} ${['Main', 'Oak', 'Pine', 'Maple', 'Cedar', 'Elm'][Math.floor(Math.random() * 6)]} St`,
-        city: cities[cityIndex],
-        state: states[cityIndex],
-        zipCode: `${Math.floor(Math.random() * 90000) + 10000}`,
-        price,
-        bedrooms,
-        bathrooms,
-        propertyType,
-        squareFootage,
-        yearBuilt,
-        monthlyRent,
-        roi: Math.max(roi, 1),
-        cashflow: Math.max(cashflow, 50),
-        caprate: Math.max(caprate, 2),
-        grossYield: Math.max(grossYield, 3),
-        description: `Beautiful ${propertyType.toLowerCase()} in a prime location. This property offers excellent investment potential with strong rental demand in the area. Features include modern amenities and convenient access to local attractions.`,
-        imageUrl: `https://images.pexels.com/photos/${[
-          '106399', '259588', '280222', '323780', '323776', '463734',
-          '534151', '545034', '584399', '681331', '731082', '813692'
-        ][Math.floor(Math.random() * 12)]}/pexels-photo-${[
-          '106399', '259588', '280222', '323780', '323776', '463734',
-          '534151', '545034', '584399', '681331', '731082', '813692'
-        ][Math.floor(Math.random() * 12)]}.jpeg?auto=compress&cs=tinysrgb&w=400`,
-      };
-    });
-
-    setProperties(sampleProperties);
-    setFilteredProperties(sampleProperties);
-  }, []);
-
-  const uploadFile = useCallback(async (file: File) => {
+  /* ------------- 1. READ from Supabase ----------------- */
+  const fetchProperties = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    try {
-      const text = await file.text();
-      const lines = text.split('\n');
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-      
-      const parsedProperties: Property[] = [];
-      
-      for (let i = 1; i < lines.length; i++) {
-        if (lines[i].trim()) {
-          const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-          const property: any = {};
-          
-          headers.forEach((header, index) => {
-            property[header] = values[index] || '';
-          });
-          
-          // Ensure required fields and calculate metrics
-          const price = Number(property.price || property.Price) || Math.floor(Math.random() * 500000) + 100000;
-          const monthlyRent = Number(property.monthlyRent || property.MonthlyRent) || Math.floor(price * 0.008);
-          const bedrooms = Number(property.bedrooms || property.Bedrooms) || Math.floor(Math.random() * 5) + 1;
-          const bathrooms = Number(property.bathrooms || property.Bathrooms) || Math.floor(Math.random() * 3) + 1;
-          
-          const annualRent = monthlyRent * 12;
-          const roi = ((annualRent - (price * 0.02)) / price) * 100;
-          const cashflow = monthlyRent - (price * 0.004);
-          const caprate = (annualRent / price) * 100;
-          const grossYield = (annualRent / price) * 100;
-          
-          parsedProperties.push({
-            id: `property-${i}`,
-            address: property.address || property.Address || `${Math.floor(Math.random() * 9999) + 1} Sample St`,
-            price,
-            bedrooms,
-            bathrooms,
-            propertyType: property.propertyType || property.PropertyType || 'Single-Family',
-            squareFootage: Number(property.squareFootage || property.SquareFootage) || undefined,
-            yearBuilt: Number(property.yearBuilt || property.YearBuilt) || undefined,
-            monthlyRent,
-            roi: Math.max(roi, 1),
-            cashflow: Math.max(cashflow, 50),
-            caprate: Math.max(caprate, 2),
-            grossYield: Math.max(grossYield, 3),
-          });
-        }
-      }
-      
-      if (parsedProperties.length === 0) {
-        generateSampleData();
-      } else {
-        setProperties(parsedProperties);
-        setFilteredProperties(parsedProperties);
-      }
-    } catch (err) {
-      setError('Error parsing CSV file. Please check the format and try again.');
-      console.error('CSV parsing error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [generateSampleData]);
+    const { data, error } = await supabase
+      .from('rerich')
+      .select('*')
 
+      console.log('rerich query ?', { data, error });
+
+    if (error) {
+      setError(error.message);
+    } else if (data) {
+      // Map DB rows ? Property type expected in UI.
+      const mapped: Property[] = data.map((row) => {
+  /* ---------- basic conversions ---------- */
+  // 1. choose a “price” we can always fall back to
+  const price =
+    Number(row.last_sale_price)            ||   // best
+    Number(row.total_assessed_value)       ||   // 2nd best
+    Number(row.est_equity)                 ||   // 3rd best
+    0;
+
+  // 2. bedroom / bath counts
+  const bedrooms   = row.bedroom_count  != null ? Number(row.bedroom_count)  : null;
+  const bathrooms  = row.bathroom_count != null ? Number(row.bathroom_count) : null;
+
+  // 3. living area, lot size, year built …
+  const sqft       = row.living_sqft    != null ? Number(row.living_sqft)    : null;
+  const lotSqft    = row.lot_size_sqft  != null ? Number(row.lot_size_sqft)  : null;
+  const yearBuilt  = row.built_year     != null ? Number(row.built_year)     : null;
+
+  // 4. client-side rent model (use 0 if you have none for now)
+  const monthlyRent = 0;
+  const annualRent  = monthlyRent * 12;
+
+  /* ---------- derived metrics ---------- */
+  const roi       = price ? ((annualRent - price * 0.02) / price) * 100 : 0;
+  const cashflow  = price ? monthlyRent - price * 0.004                : 0;
+  const caprate   = price ? (annualRent / price) * 100                 : 0;
+  const grossYield= caprate;   // same formula – keep both for UI filters
+
+  /* ---------- assemble the Property object ---------- */
+  return {
+    id:           row.full_address,                            // surrogate key
+    address:      row.full_address,
+    city:         row.city,
+    state:        row.state,
+    zipCode:      row.zip != null ? String(row.zip) : null,
+    imageUrl:     row.image_url,
+    description:  row.overall_report,
+
+    price,
+    bedrooms,
+    bathrooms,
+    squareFootage: sqft,
+    lotSizeSqft:   lotSqft,
+    yearBuilt,
+
+    monthlyRent,
+    roi:       Number(roi.toFixed(2)),
+    cashflow:  Number(cashflow.toFixed(0)),
+    caprate:   Number(caprate.toFixed(2)),
+    grossYield:Number(grossYield.toFixed(2)),
+
+    distressScore: row.distress_score != null ? Number(row.distress_score) : null,
+    leadScore:     row.lead_score     != null ? Number(row.lead_score)     : null,
+  };
+});
+
+      setProperties(mapped);
+      setFilteredProperties(mapped);
+    }
+
+    setLoading(false);
+  }, []);
+
+  /* Fetch once on mount */
+  useEffect(() => {
+    fetchProperties();
+
+    // (Optional) realtime subscription so table edits show up instantly
+    const channel = supabase
+      .channel('public:rerich')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'rerich' },
+        (_payload) => fetchProperties() // eslint-disable-line @typescript-eslint/no-unused-vars
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchProperties]);
+
+  /* ------------- 2. CSV ? insert rows into Supabase ----- */
+  const uploadFile = useCallback(
+    async (file: File) => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const csv = await file.text();
+        const [headerLine, ...rows] = csv.split('\n').filter(Boolean);
+        const headers = headerLine.split(',').map((h) => h.trim().replace(/"/g, ''));
+
+        const objects = rows.map((line) => {
+          const values = line.split(',').map((v) => v.trim().replace(/"/g, ''));
+          const row: Record<string, unknown> = {};
+          headers.forEach((h, i) => (row[h] = values[i]));
+          return row;
+        });
+
+        // Bulk insert
+        const { error } = await supabase.from('rerich').insert(objects);
+        if (error) throw error;
+
+        await fetchProperties(); // refresh list
+      } catch (err) {
+          const supaErr = err as PostgrestError;
+          setError(supaErr.message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchProperties]
+  );
+
+  /* ------------- 3. Sorting stays unchanged ------------- */
   const sortProperties = useCallback((sortBy: SortOption) => {
-    setFilteredProperties(prev => {
+    setFilteredProperties((prev) => {
       const sorted = [...prev].sort((a, b) => {
         switch (sortBy) {
           case 'price':
@@ -155,8 +170,8 @@ export const useProperties = () => {
     filteredProperties,
     loading,
     error,
-    uploadFile,
-    generateSampleData,
+    uploadFile,          // now writes to Supabase, then refreshes
+    fetchProperties,     // in case you want manual refetch
     sortProperties,
     setFilteredProperties,
   };

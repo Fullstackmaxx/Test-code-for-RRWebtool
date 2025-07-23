@@ -4,7 +4,7 @@ import { Filters } from '../types';
 
 interface FilterSidebarProps {
   filters: Filters;
-  onFilterChange: (key: keyof Filters, value: any) => void;
+  onFilterChange: (key: keyof Filters, value: unknown) => void;
 }
 
 export const FilterSidebar: React.FC<FilterSidebarProps> = ({
